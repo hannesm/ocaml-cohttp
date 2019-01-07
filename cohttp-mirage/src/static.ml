@@ -25,16 +25,13 @@ module HTTP(FS: Mirage_kv_lwt.RO)(S: Cohttp_lwt.S.Server) = struct
   let failf fmt = Fmt.kstrf Lwt.fail_with fmt
 
   let read_fs t name =
-  FS.size t name >>= function
+  FS.get t name >>= function
   | Error e -> failf "read: %a" FS.pp_error e
-  | Ok size ->
-      FS.read t name 0L size >>= function
-      | Error e -> failf "read %a" FS.pp_error e
-      | Ok bufs -> Lwt.return (Cstruct.copyv bufs)
+  | Ok value -> Lwt.return value
 
   let exists t name =
-  FS.mem t name >>= function
-  | Ok true -> Lwt.return_true
+  FS.exists t name >>= function
+  | Ok (Some _) -> Lwt.return_true
   | _ -> Lwt.return_false
 
   let dispatcher request_fn =
@@ -49,7 +46,7 @@ module HTTP(FS: Mirage_kv_lwt.RO)(S: Cohttp_lwt.S.Server) = struct
     | path ->
       Logs.info (fun f -> f "request for '%s'" path);
       Lwt.catch (fun () ->
-        read_fs fs path >>= fun body ->
+        read_fs fs (Mirage_kv.Key.v path) >>= fun body ->
         let mime_type = Magic_mime.lookup path in
         let headers = Cohttp.Header.init_with "content-type" mime_type in
         let headers = match request_fn with
@@ -58,7 +55,7 @@ module HTTP(FS: Mirage_kv_lwt.RO)(S: Cohttp_lwt.S.Server) = struct
         S.respond_string ~status:`OK ~body ~headers ()
       ) (fun _exn ->
          let with_index = Fmt.strf "%s/index.html" path in
-         exists fs with_index >>= function
+         exists fs (Mirage_kv.Key.v with_index) >>= function
          | true -> fn fs (Uri.with_path uri with_index)
          | false ->  S.respond_not_found ()
       )
