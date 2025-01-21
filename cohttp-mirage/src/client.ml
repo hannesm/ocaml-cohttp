@@ -20,13 +20,11 @@
 open Lwt.Infix
 
 module Make
-    (P : Mirage_clock.PCLOCK)
     (R : Resolver_mirage.S)
     (S : Conduit_mirage.S) =
 struct
   module Channel = Mirage_channel.Make (S.Flow)
   module HTTP_IO = Io.Make (Channel)
-  module Endpoint = Conduit_mirage.Endpoint (P)
 
   module Net_IO = struct
     module IO = HTTP_IO
@@ -44,7 +42,7 @@ struct
 
     let connect_uri ~ctx:{ resolver; conduit; authenticator } uri =
       R.resolve_uri ~uri resolver >>= fun endp ->
-      Endpoint.client ?tls_authenticator:authenticator endp >>= fun client ->
+      Conduit_mirage.Endpoint.client ?tls_authenticator:authenticator endp >>= fun client ->
       match conduit with
       | None -> failwith "conduit not initialised"
       | Some c ->
